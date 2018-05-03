@@ -2,15 +2,14 @@ package io.javalin.swagger;
 
 import io.javalin.Context;
 import io.javalin.Handler;
-import io.swagger.v3.oas.models.Operation;
 
 public class DocumentedHandler implements Handler {
 
     private Handler handler;
-    private Operation operation;
+    private Route route;
 
-    private DocumentedHandler(Operation operation, Handler handler) {
-        this.operation = operation;
+    private DocumentedHandler(Route route, Handler handler) {
+        this.route = route;
         this.handler = handler;
     }
 
@@ -19,11 +18,11 @@ public class DocumentedHandler implements Handler {
         handler.handle(ctx);
     }
 
-    Operation getOperation() {
-        return operation;
+    Route getRoute() {
+        return route;
     }
 
-    public static DocumentedHandler documented(Operation operation, Handler handler) {
-        return new DocumentedHandler(operation, handler);
+    public static DocumentedHandler documented(Route route, Handler handler) {
+        return new DocumentedHandler(route, handler);
     }
 }

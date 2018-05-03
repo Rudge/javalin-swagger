@@ -15,7 +15,7 @@ fun main(args: Array<String>) {
         .port(8080)
         .enableCorsForAllOrigins()
         .post("test/:id", documented(route()
-            .addParametersItem(
+            .param(
                 Parameter()
                     .name("id")
                     .`in`("path")

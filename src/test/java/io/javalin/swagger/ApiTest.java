@@ -20,7 +20,7 @@ public class ApiTest {
             .port(8080)
             .enableCorsForAllOrigins()
             .post("test/:id", documented(route()
-                .addParametersItem(
+                .param(
                     new Parameter()
                         .name("id")
                         .in("path")

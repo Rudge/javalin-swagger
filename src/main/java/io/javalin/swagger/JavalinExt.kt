@@ -4,6 +4,7 @@ import io.javalin.Javalin
 import io.javalin.core.HandlerType
 import io.swagger.v3.core.util.Yaml
 import io.swagger.v3.oas.models.OpenAPI
+import io.swagger.v3.oas.models.Operation
 import io.swagger.v3.oas.models.PathItem
 import io.swagger.v3.oas.models.Paths
 
@@ -35,7 +36,8 @@ fun Javalin.serveSwagger(openAPI: OpenAPI, path: String = "swagger.yaml"): Javal
                     HandlerType.INVALID -> TODO()
                     HandlerType.WEBSOCKET -> TODO()
                 }
-                op(it.value.operation)
+                op(it.value.route.operation ?: Operation())
+                pathItem.parameters(it.value.route.parameters)
             }
             acc.addPathItem(path, pathItem)
         })
