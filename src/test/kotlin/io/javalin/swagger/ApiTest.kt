@@ -22,7 +22,9 @@ fun main(args: Array<String>) {
         .post("test/:id", documented(
             route()
                 .description("test")
-                .add(parameter("id", PATH))
+                .params {
+                    parameter("id", PATH)
+                }
                 .response()
                 .add(
                     withStatus(200)
@@ -31,7 +33,7 @@ fun main(args: Array<String>) {
                                 .entry(
                                     withMime("application/html")
                                         .schema(String::class.java)
-                                        .example("header", "<h1>Hello!</h1>")
+                                        .example("<h1>Hello!</h1>")
                                 )
                         )
                 )
@@ -42,7 +44,7 @@ fun main(args: Array<String>) {
                                 .entry(
                                     withMime("application/json")
                                         .schema(TestError::class.java)
-                                        .example("error", TestError("Example", EXTERNAL))
+                                        .example(TestError("Example", EXTERNAL))
                                 )
                         )
                 )

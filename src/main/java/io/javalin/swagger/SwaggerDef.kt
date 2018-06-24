@@ -6,7 +6,7 @@ import io.swagger.v3.oas.annotations.enums.ParameterIn
 
 fun route() = Route()
 
-fun parameter(name: String, location: ParameterIn) = Parameter(name, location)
+fun parameter(name: String, location: ParameterIn) = Parameter(name, location).also { ParameterBuilder.route?.add(it) }
 
 fun content() = Content()
 
@@ -22,7 +22,7 @@ fun withStatus(status: String) = ResponseEntry(status)
 
 class Route {
     private val response = Response(this)
-    private val request = Request(response, this)
+    private val request = Request( this)
     private var description: String? = null
     private var id: String? = null
     private val parameters = mutableListOf<Parameter>()
@@ -36,10 +36,32 @@ class Route {
     fun id(id: String) = this.apply { this.id = id }
     fun id() = id
 
-    fun add(parameter: Parameter) = this.apply { this.parameters.add(parameter) }
+    fun params(closure: () -> Unit): Route {
+        synchronized(ParameterBuilder::class) {
+            ParameterBuilder.start(this)
+            closure()
+            ParameterBuilder.build()
+        }
+        return this
+    }
+    internal fun add(parameter: Parameter) = this.apply { this.parameters.add(parameter) }
+
     fun params(): List<Parameter> = parameters
 
     fun build() = this
+}
+
+private object ParameterBuilder {
+
+    internal var route: Route? = null
+
+    fun start(route: Route) {
+        this.route = route
+    }
+
+    fun build() {
+        this.route = null
+    }
 }
 
 class Parameter(private val name: String, private val location: ParameterIn) {
@@ -64,11 +86,11 @@ class Parameter(private val name: String, private val location: ParameterIn) {
 
 //#region Request
 
-class Request(private val response: Response, private val route: Route) {
+class Request(private val route: Route) {
     private var description: String? = null
     private var content: Content? = null
 
-    fun response() = response
+    fun response() = route.response()
 
     fun description(description: String) = this.apply { this.description = description }
     fun description() = description
@@ -88,15 +110,15 @@ class Content {
 
 class ContentEntry(private val mimeType: String) {
     private var schema: Class<*>? = null
-    private val examples = mutableMapOf<String, Any>()
+    private var example: Any? = null
 
     fun mime() = mimeType
 
     fun schema(schema: Class<*>) = this.also { this.schema = schema }
-    fun schema() = schema
+    fun schema() = schema as? Class<Any>
 
-    fun example(name: String, example: Any) = this.also { examples[name] = example }
-    fun examples(): Map<String, Any> = examples
+    fun example(example: Any) = this.also { this.example = example }
+    fun example(): Any? = example
 }
 
 //#endregion
@@ -110,6 +132,8 @@ class Response(private val route: Route) {
     fun entries(): List<ResponseEntry> = entries
 
     fun build() = route
+
+    fun request() = route.request()
 }
 
 class ResponseEntry(private val status: String) {

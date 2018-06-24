@@ -2,9 +2,9 @@ package io.javalin.swagger
 
 import io.javalin.Javalin
 import io.javalin.core.HandlerType
+import io.javalin.swagger.annotations.Property
 import io.swagger.v3.core.util.Yaml
 import io.swagger.v3.oas.models.*
-import io.swagger.v3.oas.models.examples.Example
 import io.swagger.v3.oas.models.media.MediaType
 import io.swagger.v3.oas.models.media.Schema
 import io.swagger.v3.oas.models.parameters.RequestBody
@@ -13,7 +13,8 @@ import io.swagger.v3.oas.models.responses.ApiResponses
 import io.swagger.v3.oas.models.media.Content as SwaggerContent
 import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
 
-val schemas = mutableMapOf<Class<*>, String>()
+private val schemas = mutableMapOf<String, Schema<*>>()
+private val primitiveSchemaTypes = setOf("string", "number")
 
 @JvmOverloads
 fun Javalin.serveSwagger(openAPI: OpenAPI, path: String = "swagger.yaml"): Javalin {
@@ -30,8 +31,9 @@ fun Javalin.serveSwagger(openAPI: OpenAPI, path: String = "swagger.yaml"): Javal
             it.key.escapeParams() to it.value.associateBy({ it.first }, { it.second })
         }
 
-    val paths = routes.fold(Paths(), { acc, (path, map) ->
+    val paths = routes.fold(Paths()) { acc, (path, map) ->
         val pathItem = PathItem()
+        val noop = { _: Operation -> }
         map.entries.forEach { (type, handler) ->
             val op = when (type) {
                 HandlerType.GET -> pathItem::get
@@ -41,38 +43,32 @@ fun Javalin.serveSwagger(openAPI: OpenAPI, path: String = "swagger.yaml"): Javal
                 HandlerType.DELETE -> pathItem::delete
                 HandlerType.HEAD -> pathItem::head
                 HandlerType.TRACE -> pathItem::trace
-                HandlerType.CONNECT -> TODO()
+                HandlerType.CONNECT -> noop
                 HandlerType.OPTIONS -> pathItem::options
-                HandlerType.BEFORE -> TODO()
-                HandlerType.AFTER -> TODO()
-                HandlerType.INVALID -> TODO()
-                HandlerType.WEBSOCKET -> TODO()
+                HandlerType.BEFORE -> noop
+                HandlerType.AFTER -> noop
+                HandlerType.INVALID -> noop
+                HandlerType.WEBSOCKET -> noop
             }
             val operation = handler.route.asOperation()
             op(operation)
         }
         acc.addPathItem(path, pathItem)
-    })
+    }
 
     val components = Components()
-    schemas.forEach { cls, _ ->
-        // TODO: How should we parse the schema?
-        val type = when {
-            cls.isAssignableFrom(String::class.java) -> "string"
-            cls.isAssignableFrom(Number::class.java) -> "number"
-            else -> "object"
-        }
-        components.addSchemas(cls.simpleName, Schema<Any>().also { it.type = type })
+    schemas.forEach { key, schema ->
+        components.addSchemas(key, schema)
     }
     openAPI.components(components)
     openAPI.paths(paths)
     val configString = Yaml.pretty(openAPI)
 
-    get(path, { ctx ->
+    get(path) { ctx ->
         ctx.result(configString)
             .status(200)
             .contentType("application/x-yaml")
-    })
+    }
 
     return this
 }
@@ -83,9 +79,9 @@ private fun String.escapeParams(): String {
         "{" + it.replace(":", "") + "}"
     }
     return params.zip(replacements)
-        .fold(this, { acc, (param, replacement) ->
+        .fold(this) { acc, (param, replacement) ->
             acc.replace(param, replacement)
-        })
+        }
 }
 
 private fun Route.asOperation(): Operation {
@@ -95,16 +91,18 @@ private fun Route.asOperation(): Operation {
         .description(route.description())
         .operationId(route.id())
 
-    route.params()
-        .forEach {
-            operation.addParametersItem(it.asSwagger())
-        }
+    operation.parameters(
+        route.params()
+            .map { it.asSwagger() }
+    )
 
     val request = route.request()
-    operation.requestBody(
-        RequestBody()
-            .description(request.description())
-            .content(content().asSwagger()))
+    if (request.description() != null && request.content() != null) {
+        operation.requestBody(
+            RequestBody()
+                .description(request.description())
+                .content(content().asSwagger()))
+    }
 
     val response = route.response()
     val swaggerResponses = ApiResponses()
@@ -118,22 +116,14 @@ private fun Route.asOperation(): Operation {
 
 private fun Parameter.asSwagger(): SwaggerParameter {
     val parameter = this
+    parameter.schema(parameter.schema() ?: String::class.java)
+
     return SwaggerParameter()
         .name(parameter.name())
         .description(parameter.description())
         .`in`(parameter.location().toString())
         .required(parameter.required())
-        .schema(parameter.schema()?.asSwagger())
-}
-
-private fun <T> Class<T>.asSwagger(): Schema<T> {
-    val cls = this
-    if (!schemas.containsKey(cls)) {
-        schemas[cls] = "#/components/schemas/" + cls.simpleName
-    }
-    val schema = Schema<T>()
-    schema.`$ref` = schemas[cls]
-    return schema
+        .schema(parameter.schema()?.parseSchema(null))
 }
 
 private fun Content.asSwagger(): SwaggerContent {
@@ -150,10 +140,7 @@ private fun Content.asSwagger(): SwaggerContent {
 private fun ContentEntry.asMediaType(): MediaType {
     val entry = this
     return MediaType()
-        .schema(entry.schema()?.asSwagger())
-        .examples(entry.examples().entries.map {
-            it.key to Example().value(it.value)
-        }.toMap())
+        .schema(entry.schema()?.parseSchema(entry.example()))
 }
 
 private fun ResponseEntry.asSwagger(): ApiResponse {
@@ -162,3 +149,62 @@ private fun ResponseEntry.asSwagger(): ApiResponse {
         .description(entry.description())
         .content(entry.content()?.asSwagger())
 }
+
+private fun <T> Class<T>.parseSchema(example: T?): Schema<T> {
+    val cls = this
+    // TODO: How should we parse the schema?
+    val type = when {
+        cls.isAssignableFrom(String::class.java) -> "string"
+        cls.isAssignableFrom(Number::class.java) -> "number"
+        cls.isEnum -> "string"
+        else -> "object"
+    }
+
+    if (primitiveSchemaTypes.contains(type)) {
+        return Schema<T>().also { schema ->
+            schema.type = type
+            schema.example = example
+
+            if (cls.isEnum) {
+                schema.enum = cls.enumConstants.toMutableList()
+            }
+        }
+    } else {
+        val key = cls.simpleName
+        val schema = schemas.getOrPut(key) {
+            Schema<T>().also {
+                it.type = type
+                val props = cls.parseProperties()
+                it.properties = props.properties
+                it.required = props.required
+            }
+        }
+        if (example != null && schema.example == null) {
+            schema.example = example
+        }
+        return Schema<T>().apply { `$ref` = "#/components/schemas/$key" }
+    }
+}
+
+private fun <T> Class<T>.parseProperties(): Schema<*> {
+    val cls = this
+    val propertyCls = Property::class.java
+
+    val properties = cls.declaredFields.filter { it.isAnnotationPresent(propertyCls) }
+        .map { Triple(it.name, it.getAnnotation(propertyCls).required, it.type) }
+
+    val methods = cls.methods.filter { it.isAnnotationPresent(propertyCls) }
+        .map { Triple(it.name.clearMethodName(), it.getAnnotation(propertyCls).required, it.returnType) }
+
+    val schema = Schema<T>()
+    (properties + methods).forEach { (name, required, cls) ->
+        val propSchema = cls.parseSchema(null)
+        schema.addProperties(name, propSchema)
+        if (required) {
+            schema.addRequiredItem(name)
+        }
+    }
+    return schema
+}
+
+private fun String.clearMethodName() = replace("(^get|^set)".toRegex(), "").decapitalize()
