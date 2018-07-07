@@ -2,6 +2,7 @@ package io.javalin.swagger
 
 import io.javalin.Javalin
 import io.javalin.core.HandlerType
+import io.javalin.embeddedserver.Location
 import io.javalin.swagger.annotations.Property
 import io.swagger.v3.core.util.Yaml
 import io.swagger.v3.oas.models.*
@@ -17,7 +18,7 @@ private val schemas = mutableMapOf<String, Schema<*>>()
 private val primitiveSchemaTypes = setOf("string", "number")
 
 @JvmOverloads
-fun Javalin.serveSwagger(openAPI: OpenAPI, path: String = "swagger.yaml"): Javalin {
+fun Javalin.serveSwagger(openAPI: OpenAPI, path: String = "swagger/yaml"): Javalin {
 
     schemas.clear()
 
@@ -69,6 +70,8 @@ fun Javalin.serveSwagger(openAPI: OpenAPI, path: String = "swagger.yaml"): Javal
             .status(200)
             .contentType("application/x-yaml")
     }
+
+    enableStaticFiles("swagger/ui/", Location.CLASSPATH)
 
     return this
 }
