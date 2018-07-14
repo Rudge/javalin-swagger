@@ -11,4 +11,4 @@ Wrap handlers with `documented` method to attach additional metadata to routes.
 
 API examples: TBD when finalized
 
-See (Kotlin example)[src/test/kotlin/io/javalin/swagger/ApiTest.kt]
+See [Kotlin example](src/test/kotlin/io/javalin/swagger/ApiTest.kt)
