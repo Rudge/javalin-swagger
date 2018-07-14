@@ -1,12 +1,15 @@
 package io.javalin.swagger
 
-import io.javalin.ApiBuilder.post
+import io.javalin.ApiBuilder.*
 import io.javalin.Javalin
 import io.javalin.swagger.DocumentedHandler.documented
 import io.javalin.swagger.annotations.Property
+import io.swagger.v3.oas.annotations.enums.ParameterIn
+import io.swagger.v3.oas.annotations.enums.ParameterIn.*
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.info.Info
+import io.swagger.v3.oas.models.tags.Tag as SwaggerTag
 
 fun main(args: Array<String>) {
 
@@ -16,6 +19,11 @@ fun main(args: Array<String>) {
                 .title("Javalin petstore")
                 .description("Test API on petstore")
         )
+        .addTagsItem(
+            SwaggerTag()
+                .description("Everything about your pets")
+                .name("pet")
+        )
 
     Javalin.create()
         .port(8080)
@@ -23,21 +31,114 @@ fun main(args: Array<String>) {
         .routes {
             post("pet", documented(
                 route()
-                    .description("Add a new pet to the store")
+                    .summary("Add a new pet to the store")
+                    .tag("pet")
                     .request()
-                        .description("Pet object that needs to be added to the store")
-                        .content(
-                            Content()
-                                .entry(
-                                    withMime("application/json")
-                                        .schema(Pet::class.java)
-                                        .example(Pet(0, Category(0, "string"), "doggie", listOf("string"), listOf(Tag(0, "string")), PetStatus.AVAILABLE))
-                                )
-                        )
+                    .description("Pet object that needs to be added to the store")
+                    .content(
+                        Content()
+                            .entry(
+                                withMime("application/json")
+                                    .schema(Pet::class.java)
+                                    .example(Pet(0, Category(0, "string"), "doggie", listOf("string"), listOf(Tag(0, "string")), PetStatus.AVAILABLE))
+                            )
+                    )
+                    .response()
+                    .add(
+                        withStatus(405)
+                            .description("Invalid input")
+                    )
+                    .build(),
+                {}
+            ))
+
+            put("pet", documented(
+                route()
+                    .summary("Update an existing pet")
+                    .tag("pet")
+                    .request()
+                    .description("Pet object that needs to be added to the store")
+                    .content(
+                        Content()
+                            .entry(
+                                withMime("application/json")
+                                    .schema(Pet::class.java)
+                            )
+                    )
+                    .response()
+                    .add(
+                        withStatus(405)
+                            .description("Validation exception")
+                    )
+                    .add(
+                        withStatus(400)
+                            .description("Invalid ID supplied")
+                    )
+                    .add(
+                        withStatus(404)
+                            .description("Pet not found")
+                    )
+                    .build(),
+                {}
+            ))
+
+            get("pet/findByStatus", documented(
+                route()
+                    .summary("Finds Pets by status")
+                    .description("Multiple status values can be provided with comma separated strings")
+                    .tag("pet")
+                    .add(
+                        Parameter("status", QUERY)
+                            .description("Status values that need to be considered for filter")
+                            .schema(PetStatus::class.java)
+                            .required(true)
+                    )
                     .response()
                         .add(
-                            withStatus(405)
-                                .description("Invalid input")
+                            withStatus(200)
+                                .description("Successful operation")
+                                .content(
+                                    Content().entry(
+                                        withMime("application/json")
+                                            .schema(Pet::class.java)
+                                    )
+                                )
+                        )
+                        .add(
+                            withStatus(400)
+                                .description("Invalid status value")
+                        )
+                    .build(),
+                {}
+            ))
+
+            get("pet/findByTag", documented(
+                route()
+                    .deprecated(true)
+                    .summary("Finds Pets by tags")
+                    .description("Multiple tags can be provided with comma separated strings. Use tag1, tag2, tag3 for testing.")
+                    .tag("pet")
+                    .params {
+                        parameter("tags", QUERY)
+                            .required(true)
+                            .description("Tags to filter by")
+                            .schema(String::class.java)
+                    }
+                    .response()
+                        .add(
+                            withStatus(200)
+                                .description("Successful operation")
+                                .content(
+                                    Content()
+                                        .entry(
+                                            withMime("application/json")
+                                                .schema(Pet::class.java)
+                                        )
+                                )
+                        )
+                        .add(
+                            withStatus(200)
+                                .description("Invalid tag value")
                         )
                     .build(),
                 {}

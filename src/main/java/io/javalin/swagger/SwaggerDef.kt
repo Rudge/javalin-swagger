@@ -24,7 +24,10 @@ class Route {
     private val response = Response(this)
     private val request = Request( this)
     private var description: String? = null
+    private var summary: String? = null
     private var id: String? = null
+    private var tag: String? = null
+    private var deprecated: Boolean? = null
     private val parameters = mutableListOf<Parameter>()
 
     fun request() = request
@@ -33,8 +36,17 @@ class Route {
     fun description(description: String) = this.apply { this.description = description }
     fun description() = description
 
+    fun summary(summary: String) = this.apply { this.summary = summary }
+    fun summary() = summary
+
     fun id(id: String) = this.apply { this.id = id }
     fun id() = id
+
+    fun tag(tag: String) = this.apply { this.tag = tag }
+    fun tag() = tag
+
+    fun deprecated(deprecated: Boolean) = this.apply { this.deprecated = deprecated }
+    fun deprecated() = deprecated
 
     fun params(closure: () -> Unit): Route {
         synchronized(ParameterBuilder::class) {

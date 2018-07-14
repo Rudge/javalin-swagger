@@ -55,6 +55,9 @@ fun Javalin.serveSwagger(openAPI: OpenAPI, path: String = "swagger/yaml"): Javal
                 HandlerType.WEBSOCKET -> noop
             }
             val operation = handler.route.asOperation()
+            if (handler.handler.javaClass.isAnnotationPresent(Deprecated::class.java)) {
+                operation.deprecated = true
+            }
             op(operation)
         }
         acc.addPathItem(path, pathItem)
@@ -95,7 +98,10 @@ private fun Route.asOperation(): Operation {
 
     val operation =  Operation()
         .description(route.description())
+        .summary(route.summary())
         .operationId(route.id())
+        .addTagsItem(route.tag())
+        .deprecated(route.deprecated())
 
     operation.parameters(
         route.params()

@@ -22,6 +22,10 @@ public class DocumentedHandler implements Handler {
         return route;
     }
 
+    Handler getHandler() {
+        return handler;
+    }
+
     public static DocumentedHandler documented(Route route, Handler handler) {
         return new DocumentedHandler(route, handler);
     }
