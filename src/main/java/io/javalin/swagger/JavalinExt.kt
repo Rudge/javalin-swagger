@@ -4,6 +4,7 @@ import io.javalin.Javalin
 import io.javalin.core.HandlerType
 import io.javalin.embeddedserver.Location
 import io.javalin.swagger.annotations.Property
+import io.javalin.swagger.annotations.Schema as SchemaAnn
 import io.swagger.v3.core.util.Yaml
 import io.swagger.v3.oas.models.*
 import io.swagger.v3.oas.models.media.MediaType
@@ -104,7 +105,7 @@ private fun Route.asOperation(): Operation {
         operation.requestBody(
             RequestBody()
                 .description(request.description())
-                .content(content().asSwagger()))
+                .content(request.content()?.asSwagger()))
     }
 
     val response = route.response()
@@ -158,7 +159,7 @@ private fun <T> Class<T>.parseSchema(example: T?): Schema<T> {
     // TODO: How should we parse the schema?
     val type = when {
         cls.isAssignableFrom(String::class.java) -> "string"
-        cls.isAssignableFrom(Number::class.java) -> "number"
+        cls.isPrimitive && cls in setOf(Long::class.java, Int::class.java) -> "number"
         cls.isEnum -> "string"
         else -> "object"
     }
@@ -169,6 +170,7 @@ private fun <T> Class<T>.parseSchema(example: T?): Schema<T> {
             schema.example = example
 
             if (cls.isEnum) {
+                schema.description = cls.description()
                 schema.enum = cls.enumConstants.toMutableList()
             }
         }
@@ -200,6 +202,7 @@ private fun <T> Class<T>.parseProperties(): Schema<*> {
         .map { Triple(it.name.clearMethodName(), it.getAnnotation(propertyCls).required, it.returnType) }
 
     val schema = Schema<T>()
+    schema.description = cls.description()
     (properties + methods).forEach { (name, required, cls) ->
         val propSchema = cls.parseSchema(null)
         schema.addProperties(name, propSchema)
@@ -208,6 +211,17 @@ private fun <T> Class<T>.parseProperties(): Schema<*> {
         }
     }
     return schema
+}
+
+private fun <T> Class<T>.description(): String? {
+    val schemaCls = SchemaAnn::class.java
+
+    return if (isAnnotationPresent(schemaCls)) {
+        val schema = getAnnotation(schemaCls)
+        if (schema.description.isEmpty()) null else schema.description
+    } else {
+        null
+    }
 }
 
 private fun String.clearMethodName() = replace("(^get|^set)".toRegex(), "").decapitalize()
