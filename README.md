@@ -11,4 +11,9 @@ Wrap handlers with `documented` method to attach additional metadata to routes.
 
 API examples: TBD when finalized
 
+Current techplan:
+- Implement swagger petstore example, adding/fixing functionality
+    - Currently missing: List/Array support in schema declaration
+- Refactor API
+
 See [Kotlin example](src/test/kotlin/io/javalin/swagger/ApiTest.kt)
