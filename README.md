@@ -5,6 +5,7 @@ routes and serve it. The file is served from `/swagger/yaml/`. Optionally, you c
 served from root path.
 
 General configuration: TBD
+
 UI configuration: TBD
 
 Wrap handlers with `documented` method to attach additional metadata to routes.
