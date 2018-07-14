@@ -7,16 +7,18 @@ import io.javalin.swagger.annotations.Property
 import io.javalin.swagger.annotations.Schema as SchemaAnn
 import io.swagger.v3.core.util.Yaml
 import io.swagger.v3.oas.models.*
+import io.swagger.v3.oas.models.media.ArraySchema
 import io.swagger.v3.oas.models.media.MediaType
 import io.swagger.v3.oas.models.media.Schema
 import io.swagger.v3.oas.models.parameters.RequestBody
 import io.swagger.v3.oas.models.responses.ApiResponse
 import io.swagger.v3.oas.models.responses.ApiResponses
+import java.lang.reflect.ParameterizedType
 import io.swagger.v3.oas.models.media.Content as SwaggerContent
 import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
 
 private val schemas = mutableMapOf<String, Schema<*>>()
-private val primitiveSchemaTypes = setOf("string", "number")
+private val primitiveSchemaTypes = setOf("string", "number", "array")
 
 @JvmOverloads
 fun Javalin.serveSwagger(openAPI: OpenAPI, path: String = "swagger/yaml"): Javalin {
@@ -154,18 +156,25 @@ private fun ResponseEntry.asSwagger(): ApiResponse {
         .content(entry.content()?.asSwagger())
 }
 
-private fun <T> Class<T>.parseSchema(example: T?): Schema<T> {
+private fun <T> Class<T>.parseSchema(example: T?, genericType: Class<*>? = null): Schema<*> {
     val cls = this
     // TODO: How should we parse the schema?
     val type = when {
         cls.isAssignableFrom(String::class.java) -> "string"
         cls.isPrimitive && cls in setOf(Long::class.java, Int::class.java) -> "number"
+        cls.isArray || cls.isAssignableFrom(List::class.java) -> "array"
         cls.isEnum -> "string"
         else -> "object"
     }
 
     if (primitiveSchemaTypes.contains(type)) {
-        return Schema<T>().also { schema ->
+        return if (type == "array") {
+            ArraySchema().also {
+                it.items = genericType?.parseSchema(null, null)
+            }
+        } else {
+            Schema<T>()
+        }.also { schema ->
             schema.type = type
             schema.example = example
 
@@ -196,15 +205,16 @@ private fun <T> Class<T>.parseProperties(): Schema<*> {
     val propertyCls = Property::class.java
 
     val properties = cls.declaredFields.filter { it.isAnnotationPresent(propertyCls) }
-        .map { Triple(it.name, it.getAnnotation(propertyCls).required, it.type) }
+        .map { Triple(Pair(it.type, it.genericType as? ParameterizedType), it.name, it.getAnnotation(propertyCls).required) }
 
     val methods = cls.methods.filter { it.isAnnotationPresent(propertyCls) }
-        .map { Triple(it.name.clearMethodName(), it.getAnnotation(propertyCls).required, it.returnType) }
+        .map { Triple(Pair(it.returnType, it.genericReturnType as? ParameterizedType), it.name.clearMethodName(), it.getAnnotation(propertyCls).required) }
 
     val schema = Schema<T>()
     schema.description = cls.description()
-    (properties + methods).forEach { (name, required, cls) ->
-        val propSchema = cls.parseSchema(null)
+    (properties + methods).forEach { (clsType, name, required) ->
+        val (cls, type) = clsType
+        val propSchema = cls.parseSchema(null, type?.actualTypeArguments?.firstOrNull() as? Class<*>)
         schema.addProperties(name, propSchema)
         if (required) {
             schema.addRequiredItem(name)

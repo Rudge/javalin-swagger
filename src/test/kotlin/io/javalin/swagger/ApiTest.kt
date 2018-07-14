@@ -63,12 +63,16 @@ data class Pet(
 )
 
 data class Category(
+    @Property
     val id: Long,
+    @Property
     val name: String
 )
 
 data class Tag(
+    @Property
     val id: Long,
+    @Property
     val name: String
 )
 
