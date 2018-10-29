@@ -11,6 +11,7 @@ fun parameter(name: String, location: ParameterIn) = Parameter(name, location).a
 fun content() = Content()
 
 fun withMime(mimeType: String) = ContentEntry(mimeType)
+fun withMimeJson(mimeType: String = "application/json") = ContentEntry(mimeType)
 
 fun withStatus(status: Int) = ResponseEntry(status.toString())
 
@@ -22,7 +23,7 @@ fun withStatus(status: String) = ResponseEntry(status)
 
 class Route {
     private val response = Response(this)
-    private val request = Request( this)
+    private val request = Request(this)
     private var description: String? = null
     private var summary: String? = null
     private var id: String? = null
@@ -56,6 +57,7 @@ class Route {
         }
         return this
     }
+
     internal fun add(parameter: Parameter) = this.apply { this.parameters.add(parameter) }
 
     fun params(): List<Parameter> = parameters

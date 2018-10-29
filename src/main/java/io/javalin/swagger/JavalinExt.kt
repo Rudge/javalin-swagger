@@ -2,11 +2,13 @@ package io.javalin.swagger
 
 import io.javalin.Javalin
 import io.javalin.core.HandlerType
-import io.javalin.embeddedserver.Location
 import io.javalin.swagger.annotations.Property
-import io.javalin.swagger.annotations.Schema as SchemaAnn
 import io.swagger.v3.core.util.Yaml
-import io.swagger.v3.oas.models.*
+import io.swagger.v3.oas.models.Components
+import io.swagger.v3.oas.models.OpenAPI
+import io.swagger.v3.oas.models.Operation
+import io.swagger.v3.oas.models.PathItem
+import io.swagger.v3.oas.models.Paths
 import io.swagger.v3.oas.models.media.ArraySchema
 import io.swagger.v3.oas.models.media.MediaType
 import io.swagger.v3.oas.models.media.Schema
@@ -14,26 +16,35 @@ import io.swagger.v3.oas.models.parameters.RequestBody
 import io.swagger.v3.oas.models.responses.ApiResponse
 import io.swagger.v3.oas.models.responses.ApiResponses
 import java.lang.reflect.ParameterizedType
+import java.util.*
+import io.javalin.swagger.annotations.Schema as SchemaAnn
 import io.swagger.v3.oas.models.media.Content as SwaggerContent
 import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
 
 private val schemas = mutableMapOf<String, Schema<*>>()
 private val primitiveSchemaTypes = setOf("string", "number", "array")
+private val documentedRoutes = ArrayDeque<Route>()
+
+fun documented(app: Unit, route: () -> Route): Route {
+    val route = route()
+    documentedRoutes.add(route)
+    return route
+}
 
 @JvmOverloads
-fun Javalin.serveSwagger(openAPI: OpenAPI, path: String = "swagger/yaml"): Javalin {
+fun Javalin.serveSwagger(openAPI: OpenAPI, path: String = "api-docs"): Javalin {
 
     schemas.clear()
 
-    val routes = this.routeOverviewEntries
-        .asSequence()
-        .filter { it.handler is DocumentedHandler }
-        .map { it.path to (it.httpMethod to it.handler as DocumentedHandler) }
-        .groupBy({ it.first }, { it.second })
-        .entries
-        .map {
-            it.key.escapeParams() to it.value.associateBy({ it.first }, { it.second })
-        }
+    val routes = this.handlerMetaInfo
+            .asSequence()
+            .filter { it.path != "*" }
+            .map { it.path to (it.httpMethod to it.handler) }
+            .groupBy({ it.first }, { it.second })
+            .entries
+            .map {
+                it.key.escapeParams() to it.value.associateBy({ it.first }, { it.second })
+            }
 
     val paths = routes.fold(Paths()) { acc, (path, map) ->
         val pathItem = PathItem()
@@ -54,8 +65,8 @@ fun Javalin.serveSwagger(openAPI: OpenAPI, path: String = "swagger/yaml"): Javal
                 HandlerType.INVALID -> noop
                 HandlerType.WEBSOCKET -> noop
             }
-            val operation = handler.route.asOperation()
-            if (handler.handler.javaClass.isAnnotationPresent(Deprecated::class.java)) {
+            val operation = asOperation(documentedRoutes.pop())
+            if (handler.javaClass.isAnnotationPresent(Deprecated::class.java)) {
                 operation.deprecated = true
             }
             op(operation)
@@ -71,13 +82,13 @@ fun Javalin.serveSwagger(openAPI: OpenAPI, path: String = "swagger/yaml"): Javal
     openAPI.paths(paths)
     val configString = Yaml.pretty(openAPI)
 
+    enableWebJars()
+//    get(path, SwaggerRenderer("spec.yaml"))
     get(path) { ctx ->
         ctx.result(configString)
-            .status(200)
-            .contentType("application/x-yaml")
+                .status(200)
+//                .contentType("application/x-yaml")
     }
-
-    enableStaticFiles("swagger/ui/", Location.CLASSPATH)
 
     return this
 }
@@ -88,32 +99,30 @@ private fun String.escapeParams(): String {
         "{" + it.replace(":", "") + "}"
     }
     return params.zip(replacements)
-        .fold(this) { acc, (param, replacement) ->
-            acc.replace(param, replacement)
-        }
+            .fold(this) { acc, (param, replacement) ->
+                acc.replace(param, replacement)
+            }
 }
 
-private fun Route.asOperation(): Operation {
-    val route = this
-
-    val operation =  Operation()
-        .description(route.description())
-        .summary(route.summary())
-        .operationId(route.id())
-        .addTagsItem(route.tag())
-        .deprecated(route.deprecated())
+private fun asOperation(route: Route): Operation {
+    val operation = Operation()
+            .description(route.description())
+            .summary(route.summary())
+            .operationId(route.id())
+            .addTagsItem(route.tag())
+            .deprecated(route.deprecated())
 
     operation.parameters(
-        route.params()
-            .map { it.asSwagger() }
+            route.params()
+                    .map { it.asSwagger() }
     )
 
     val request = route.request()
     if (request.description() != null && request.content() != null) {
         operation.requestBody(
-            RequestBody()
-                .description(request.description())
-                .content(request.content()?.asSwagger()))
+                RequestBody()
+                        .description(request.description())
+                        .content(request.content()?.asSwagger()))
     }
 
     val response = route.response()
@@ -131,11 +140,11 @@ private fun Parameter.asSwagger(): SwaggerParameter {
     parameter.schema(parameter.schema() ?: String::class.java)
 
     return SwaggerParameter()
-        .name(parameter.name())
-        .description(parameter.description())
-        .`in`(parameter.location().toString())
-        .required(parameter.required())
-        .schema(parameter.schema()?.parseSchema(null))
+            .name(parameter.name())
+            .description(parameter.description())
+            .`in`(parameter.location().toString())
+            .required(parameter.required())
+            .schema(parameter.schema()?.parseSchema(null))
 }
 
 private fun Content.asSwagger(): SwaggerContent {
@@ -152,14 +161,14 @@ private fun Content.asSwagger(): SwaggerContent {
 private fun ContentEntry.asMediaType(): MediaType {
     val entry = this
     return MediaType()
-        .schema(entry.schema()?.parseSchema(entry.example()))
+            .schema(entry.schema()?.parseSchema(entry.example()))
 }
 
 private fun ResponseEntry.asSwagger(): ApiResponse {
     val entry = this
     return ApiResponse()
-        .description(entry.description())
-        .content(entry.content()?.asSwagger())
+            .description(entry.description())
+            .content(entry.content()?.asSwagger())
 }
 
 private fun <T> Class<T>.parseSchema(example: T?, genericType: Class<*>? = null): Schema<*> {
@@ -211,10 +220,10 @@ private fun <T> Class<T>.parseProperties(): Schema<*> {
     val propertyCls = Property::class.java
 
     val properties = cls.declaredFields.filter { it.isAnnotationPresent(propertyCls) }
-        .map { Triple(Pair(it.type, it.genericType as? ParameterizedType), it.name, it.getAnnotation(propertyCls).required) }
+            .map { Triple(Pair(it.type, it.genericType as? ParameterizedType), it.name, it.getAnnotation(propertyCls).required) }
 
     val methods = cls.methods.filter { it.isAnnotationPresent(propertyCls) }
-        .map { Triple(Pair(it.returnType, it.genericReturnType as? ParameterizedType), it.name.clearMethodName(), it.getAnnotation(propertyCls).required) }
+            .map { Triple(Pair(it.returnType, it.genericReturnType as? ParameterizedType), it.name.clearMethodName(), it.getAnnotation(propertyCls).required) }
 
     val schema = Schema<T>()
     schema.description = cls.description()

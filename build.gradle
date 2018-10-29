@@ -25,11 +25,13 @@ repositories {
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
     implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
-    implementation "io.javalin:javalin:1.6.0"
+    implementation "io.javalin:javalin:2.3.0"
+    implementation "org.slf4j:slf4j-simple:1.7.25"
     api "io.swagger.core.v3:swagger-core:2.0.1"
     api "io.swagger.core.v3:swagger-models:2.0.1"
     api "io.swagger.core.v3:swagger-annotations:2.0.1"
     api "io.swagger.core.v3:swagger-integration:2.0.1"
+    api "org.webjars:swagger-ui:3.17.6"
     implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.9.2"
     testImplementation "junit:junit:4.12"
 }
