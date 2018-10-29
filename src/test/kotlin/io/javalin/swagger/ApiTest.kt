@@ -10,16 +10,21 @@ import io.swagger.v3.oas.annotations.enums.ParameterIn
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.info.Info
+import io.swagger.v3.oas.models.info.License
+import io.swagger.v3.oas.models.servers.Server
 import io.swagger.v3.oas.models.tags.Tag as SwaggerTag
 
 fun main(args: Array<String>) {
 
     val api = OpenAPI()
             .info(Info()
-                    .title("Javalin petstore")
-                    .description("Test API on petstore")
                     .version("1.0.0")
+                    .title("Swagger Petstore")
+                    .description("Test API on petstore")
+                    .license(License().name("MIT"))
             )
+            .addServersItem(Server().url("http://localhost:8080"))
+            .addServersItem(Server().url("http://petstore.swagger.io/v1"))
             .addTagsItem(SwaggerTag()
                     .description("Everything about your pets")
                     .name("pet")
@@ -31,6 +36,26 @@ fun main(args: Array<String>) {
             .enableCorsForAllOrigins() // for editor.swagger.io
             .enableCaseSensitiveUrls()
             .routes {
+                path("pets") {
+                    documented(get(petController::get)) {
+                        route().summary("List all pets")
+                                .id("listPets")
+                                .tag("pets")
+                                .add(Parameter("limit", ParameterIn.QUERY)
+                                        .description("How many items to return at one time (max 100)")
+                                        .schema(Int::class.java)
+                                )
+                                .response()
+                                .add(withStatus(200)
+                                        .description("A paged array of pets")
+//                                        .headers()
+                                        .content(Content().entry(withMimeJson().schema(Array<Pet>::class.java)))
+                                )
+                                .add(withStatus("default").description("unexpected error")
+                                        .content(Content().entry(withMimeJson().schema(Error::class.java))))
+                                .build()
+                    }
+                }
                 path("pet") {
                     documented(post(petController::add)) {
                         route().summary("Add a new pet to the store")
@@ -137,3 +162,9 @@ enum class PetStatus(private val value: String) {
 
     override fun toString() = value
 }
+
+data class Error(
+        @Property
+        val code: Int,
+        @Property
+        val message: String)

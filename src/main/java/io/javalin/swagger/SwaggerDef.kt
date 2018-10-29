@@ -1,6 +1,7 @@
 package io.javalin.swagger
 
 import io.swagger.v3.oas.annotations.enums.ParameterIn
+import java.util.*
 
 //#region Factory functions
 
@@ -82,6 +83,7 @@ class Parameter(private val name: String, private val location: ParameterIn) {
     private var description: String? = null
     private var required: Boolean? = null
     private var schema: Class<*>? = null
+    private var format: String? = null
 
     fun name() = name
     fun location() = location
@@ -94,6 +96,9 @@ class Parameter(private val name: String, private val location: ParameterIn) {
 
     fun schema(schema: Class<*>) = this.apply { this.schema = schema }
     fun schema() = schema
+
+    fun format(format: String) = this.apply { this.format = format }
+    fun format() = format
 }
 
 //#endregion
@@ -161,6 +166,37 @@ class ResponseEntry(private val status: String) {
 
     fun content(content: Content) = this.apply { this.content = content }
     fun content() = content
-}
 
+//    fun headers() =
+}
 //#endregion
+
+enum class FormatType {
+    INT32(Int::class.java, "integer", "int32"),
+    INT64(Long::class.java, "integer", "int64"),
+    FLOAT(Float::class.java, "number", "float"),
+    DOUBLE(Double::class.java, "number", "double"),
+    STRING(String::class.java, "string", null),
+    BYTE(Byte::class.java, "string", "byte"),
+    BOOLEAN(Boolean::class.java, "boolean", null),
+    DATE(Date::class.java, "string", "date");
+    //    DATETIME(Date::class.java, "string", "date-time"), TODO look for class in kotlin to replace Date
+    //PASSWORD(String::class.java, "string", "password")
+
+    private val clazz: Class<*>
+    val type: String
+    val format: String?
+
+    constructor(clazz: Class<*>, type: String, format: String?) {
+        this.clazz = clazz
+        this.type = type
+        this.format = format
+    }
+
+    companion object {
+        fun getByClass(clazz: Class<*>?): FormatType? {
+            if (clazz == null) return null
+            return values().find { it.clazz == clazz }
+        }
+    }
+}

@@ -22,7 +22,6 @@ import io.swagger.v3.oas.models.media.Content as SwaggerContent
 import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
 
 private val schemas = mutableMapOf<String, Schema<*>>()
-private val primitiveSchemaTypes = setOf("string", "number", "array")
 private val documentedRoutes = ArrayDeque<Route>()
 
 fun documented(app: Unit, route: () -> Route): Route {
@@ -173,45 +172,54 @@ private fun ResponseEntry.asSwagger(): ApiResponse {
 
 private fun <T> Class<T>.parseSchema(example: T?, genericType: Class<*>? = null): Schema<*> {
     val cls = this
-    // TODO: How should we parse the schema?
-    val type = when {
-        cls.isAssignableFrom(String::class.java) -> "string"
-        cls.isPrimitive && cls in setOf(Long::class.java, Int::class.java) -> "number"
-        cls.isArray || cls.isAssignableFrom(List::class.java) -> "array"
-        cls.isEnum -> "string"
-        else -> "object"
-    }
+    val formatType = FormatType.getByClass(cls)
 
-    if (primitiveSchemaTypes.contains(type)) {
-        return if (type == "array") {
-            ArraySchema().also {
+    when {
+        cls.isPrimitive -> {
+            return Schema<T>().type(formatType?.type).format(formatType?.format)
+        }
+        cls.isArray -> {
+            val nameRef = "${cls.componentType.simpleName}s"
+            val keyRef = "#/components/schemas/$nameRef"
+            val schemaArrayRef = Schema<T>().also { schema ->
+                schema.`$ref` = keyRef
+                schema.example = example
+            }
+            val schemaObjectRef = Schema<T>().also { schema ->
+                schema.`$ref` = "#/components/schemas/${cls.componentType.simpleName}"
+            }
+            schemas[nameRef] = ArraySchema().items(schemaObjectRef)
+            return schemaArrayRef
+        }
+        cls.isEnum -> {
+            return Schema<T>().type("string")
+                    .example(example)
+                    .description(cls.description())
+                    .also { it.enum = cls.enumConstants.toList() }
+        }
+        cls.isAssignableFrom(List::class.java) -> {
+            return ArraySchema().also {
                 it.items = genericType?.parseSchema(null, null)
-            }
-        } else {
-            Schema<T>()
-        }.also { schema ->
-            schema.type = type
-            schema.example = example
-
-            if (cls.isEnum) {
-                schema.description = cls.description()
-                schema.enum = cls.enumConstants.toMutableList()
+            }.also { schema ->
+                schema.type = "array"
+                schema.example = example
             }
         }
-    } else {
-        val key = cls.simpleName
-        val schema = schemas.getOrPut(key) {
-            Schema<T>().also {
-                it.type = type
-                val props = cls.parseProperties()
-                it.properties = props.properties
-                it.required = props.required
+        else -> {
+            val key = cls.simpleName
+            val schema = schemas.getOrPut(key) {
+                Schema<T>().also {
+                    it.type = "object"
+                    val props = cls.parseProperties()
+                    it.properties = props.properties
+                    it.required = props.required
+                }
             }
+            if (example != null && schema.example == null) {
+                schema.example = example
+            }
+            return Schema<T>().apply { `$ref` = "#/components/schemas/$key" }
         }
-        if (example != null && schema.example == null) {
-            schema.example = example
-        }
-        return Schema<T>().apply { `$ref` = "#/components/schemas/$key" }
     }
 }
 
