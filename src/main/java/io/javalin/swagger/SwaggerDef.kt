@@ -1,6 +1,7 @@
 package io.javalin.swagger
 
 import io.swagger.v3.oas.annotations.enums.ParameterIn
+import io.swagger.v3.oas.models.media.Schema
 import java.util.*
 
 //#region Factory functions
@@ -158,6 +159,7 @@ class Response(private val route: Route) {
 class ResponseEntry(private val status: String) {
     private var description: String? = null
     private var content: Content? = null
+    private var headers: Array<out Header>? = null
 
     fun status() = status
 
@@ -167,7 +169,38 @@ class ResponseEntry(private val status: String) {
     fun content(content: Content) = this.apply { this.content = content }
     fun content() = content
 
-//    fun headers() =
+    fun headers(vararg headers: Header) = this.apply { this.headers = headers }
+    fun headers(): MutableMap<String, io.swagger.v3.oas.models.headers.Header>? {
+        var headersOfSwagger: MutableMap<String, io.swagger.v3.oas.models.headers.Header>? = null
+        headers?.apply {
+            headersOfSwagger = mutableMapOf()
+        }?.forEach { header ->
+            headersOfSwagger!![header.name] = header.asSwaggerType()
+        }
+        return headersOfSwagger
+    }
+}
+
+class Header(val name: String) {
+    private var schema: FormatType? = null
+    private var description: String? = null
+
+    fun schema(): FormatType? {
+        return schema
+    }
+
+    fun <T> schema(clazz: Class<T>): Header {
+        this.schema = FormatType.getByClass(clazz)
+        return this
+    }
+
+    fun description(description: String) = this.apply { this.description = description }
+
+    fun asSwaggerType(): io.swagger.v3.oas.models.headers.Header {
+        return io.swagger.v3.oas.models.headers.Header()
+                .description(this.description)
+                .schema(this.schema()?.getSchema())
+    }
 }
 //#endregion
 
@@ -193,10 +226,15 @@ enum class FormatType {
         this.format = format
     }
 
+    fun getSchema(): Schema<*> {
+        return Schema<Any>().type(this.type).format(this.format)
+    }
+
     companion object {
         fun getByClass(clazz: Class<*>?): FormatType? {
             if (clazz == null) return null
             return values().find { it.clazz == clazz }
         }
+
     }
 }

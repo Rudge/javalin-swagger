@@ -48,7 +48,7 @@ fun main(args: Array<String>) {
                                 .response()
                                 .add(withStatus(200)
                                         .description("A paged array of pets")
-//                                        .headers()
+                                        .headers(Header("x-next").description("A link to the next page of responses").schema(String::class.java))
                                         .content(Content().entry(withMimeJson().schema(Array<Pet>::class.java)))
                                 )
                                 .add(withStatus("default").description("unexpected error")

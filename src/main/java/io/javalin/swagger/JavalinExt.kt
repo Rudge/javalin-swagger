@@ -168,15 +168,16 @@ private fun ResponseEntry.asSwagger(): ApiResponse {
     return ApiResponse()
             .description(entry.description())
             .content(entry.content()?.asSwagger())
+            .headers(entry.headers())
 }
 
-private fun <T> Class<T>.parseSchema(example: T?, genericType: Class<*>? = null): Schema<*> {
+private fun <T> Class<T>.parseSchema(example: T?, genericType: Class<*>? = null): Schema<*>? {
     val cls = this
     val formatType = FormatType.getByClass(cls)
 
     when {
         cls.isPrimitive -> {
-            return Schema<T>().type(formatType?.type).format(formatType?.format)
+            return formatType?.getSchema()
         }
         cls.isArray -> {
             val nameRef = "${cls.componentType.simpleName}s"
