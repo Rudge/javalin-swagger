@@ -8,9 +8,11 @@ import io.javalin.apibuilder.ApiBuilder.put
 import io.javalin.swagger.annotations.Property
 import io.swagger.v3.oas.annotations.enums.ParameterIn
 import io.swagger.v3.oas.annotations.media.Schema
+import io.swagger.v3.oas.models.ExternalDocumentation
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.info.Info
 import io.swagger.v3.oas.models.info.License
+import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.oas.models.servers.Server
 import io.swagger.v3.oas.models.tags.Tag as SwaggerTag
 
@@ -21,13 +23,22 @@ fun main(args: Array<String>) {
                     .version("1.0.0")
                     .title("Swagger Petstore")
                     .description("Test API on petstore")
-                    .license(License().name("MIT"))
+                    .license(License().name("Apache 2.0").url("http://www.apache.org/licenses/LICENSE-2.0.html"))
+                    .termsOfService("http://swagger.io/terms/")
             )
             .addServersItem(Server().url("http://localhost:8080"))
             .addServersItem(Server().url("http://petstore.swagger.io/v1"))
             .addTagsItem(SwaggerTag()
                     .description("Everything about your pets")
-                    .name("pet")
+                    .name("pet").externalDocs(ExternalDocumentation()
+                            .description("Find out more").url("http://swagger.io")
+                    )
+            )
+            .addTagsItem(SwaggerTag()
+                    .description("Operations about user")
+                    .name("user").externalDocs(ExternalDocumentation()
+                            .description("Find out more about our store").url("http://swagger.io")
+                    )
             )
 
     val petController = PetController()
@@ -37,9 +48,11 @@ fun main(args: Array<String>) {
             .enableCaseSensitiveUrls()
             .routes {
                 path("pets") {
-                    documented(get(petController::get)) {
-                        route().summary("List all pets")
+                    documented {
+                        get(petController::get)
+                        route()
                                 .id("listPets")
+                                .summary("List all pets")
                                 .tag("pets")
                                 .add(Parameter("limit", ParameterIn.QUERY)
                                         .description("How many items to return at one time (max 100)")
@@ -57,10 +70,14 @@ fun main(args: Array<String>) {
                     }
                 }
                 path("pet") {
-                    documented(post(petController::add)) {
-                        route().summary("Add a new pet to the store")
+                    documented {
+                        post(petController::add)
+                        route()
+                                .id("addPet")
+                                .summary("Add a new pet to the store")
                                 .tag("pet")
-                                .request().description("Pet object that needs to be added to the store")
+                                .securityRequirements(SecurityRequirement().addList("petstore_auth", listOf("write:pets", "read:pets")))
+                                .request().description("Pet object that needs to be added to the store").required(true)
                                 .content(Content().entry(withMimeJson().schema(Pet::class.java)
                                         .example(Pet(0, Category(0, "string"), "doggie",
                                                 listOf("string"), listOf(Tag(0, "string")), PetStatus.AVAILABLE))))
@@ -69,11 +86,14 @@ fun main(args: Array<String>) {
                                 .add(withStatus(405).description("Invalid input"))
                                 .build()
                     }
-                    documented(put(petController::update)) {
-                        route().summary("Update an existing pet")
+                    documented {
+                        put(petController::update)
+                        route()
+                                .id("updatePet")
+                                .summary("Update an existing pet")
                                 .tag("pet")
-                                .request()
-                                .description("Pet object that needs to be added to the store")
+                                .securityRequirements(SecurityRequirement().addList("petstore_auth", listOf("write:pets", "read:pets")))
+                                .request().description("Pet object that needs to be added to the store").required(true)
                                 .content(Content().entry(withMimeJson().schema(Pet::class.java)))
                                 .response()
                                 .add(withStatus(405).description("Validation exception"))
@@ -81,9 +101,11 @@ fun main(args: Array<String>) {
                                 .add(withStatus(404).description("Pet not found"))
                                 .build()
                     }
-
-                    documented(get("findByStatus", petController::findByStatus)) {
-                        route().summary("Finds Pets by status")
+                    documented {
+                        get("findByStatus", petController::findByStatus)
+                        route()
+                                .id("findPetsByStatus")
+                                .summary("Finds Pets by status")
                                 .description("Multiple status values can be provided with comma separated strings")
                                 .tag("pet")
                                 .add(Parameter("status", ParameterIn.QUERY)
@@ -99,8 +121,8 @@ fun main(args: Array<String>) {
                                 .add(withStatus(400).description("Invalid status value"))
                                 .build()
                     }
-
-                    documented(get("findByTag", petController::findByTag)) {
+                    documented {
+                        get("findByTag", petController::findByTag)
                         route().deprecated(true)
                                 .summary("Finds Pets by tags")
                                 .description("Multiple tags can be provided with comma separated strings. Use tag1, tag2, tag3 for testing.")

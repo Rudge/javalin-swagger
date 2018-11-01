@@ -1,19 +1,21 @@
 package io.javalin.swagger
 
 import io.swagger.v3.oas.annotations.enums.ParameterIn
+import io.swagger.v3.oas.models.media.MediaType
 import io.swagger.v3.oas.models.media.Schema
+import io.swagger.v3.oas.models.security.SecurityRequirement
 import java.util.*
 
 //#region Factory functions
-
 fun route() = Route()
 
 fun parameter(name: String, location: ParameterIn) = Parameter(name, location).also { ParameterBuilder.route?.add(it) }
 
 fun content() = Content()
 
-fun withMime(mimeType: String) = ContentEntry(mimeType)
+fun withMime(vararg mimeTypes: String) = ContentEntry(mimeTypes.toMutableList())
 fun withMimeJson(mimeType: String = "application/json") = ContentEntry(mimeType)
+
 
 fun withStatus(status: Int) = ResponseEntry(status.toString())
 
@@ -32,6 +34,7 @@ class Route {
     private var tag: String? = null
     private var deprecated: Boolean? = null
     private val parameters = mutableListOf<Parameter>()
+    private val securityRequirements = mutableListOf<SecurityRequirement>()
 
     fun request() = request
     fun response() = response
@@ -50,6 +53,9 @@ class Route {
 
     fun deprecated(deprecated: Boolean) = this.apply { this.deprecated = deprecated }
     fun deprecated() = deprecated
+
+    fun securityRequirements(vararg securityRequirements: SecurityRequirement) = this.apply { this.securityRequirements.addAll(securityRequirements) }
+    fun securityRequirements() = securityRequirements
 
     fun params(closure: () -> Unit): Route {
         synchronized(ParameterBuilder::class) {
@@ -83,8 +89,9 @@ private object ParameterBuilder {
 class Parameter(private val name: String, private val location: ParameterIn) {
     private var description: String? = null
     private var required: Boolean? = null
-    private var schema: Class<*>? = null
+    private var schema: FormatType? = null
     private var format: String? = null
+    private var default: String? = null
 
     fun name() = name
     fun location() = location
@@ -95,11 +102,18 @@ class Parameter(private val name: String, private val location: ParameterIn) {
     fun required(required: Boolean) = this.apply { this.required = required }
     fun required() = required
 
-    fun schema(schema: Class<*>) = this.apply { this.schema = schema }
+    fun schema(schema: Class<*>) = this.apply { this.schema = FormatType.getByClass(schema) }
     fun schema() = schema
 
     fun format(format: String) = this.apply { this.format = format }
     fun format() = format
+
+    fun asSwagger() = io.swagger.v3.oas.models.parameters.Parameter()
+            .name(this.name())
+            .description(this.description())
+            .`in`(this.location().toString())
+            .required(this.required())
+            .schema(this.schema()?.getSchema())
 }
 
 //#endregion
@@ -109,6 +123,7 @@ class Parameter(private val name: String, private val location: ParameterIn) {
 class Request(private val route: Route) {
     private var description: String? = null
     private var content: Content? = null
+    private var required: Boolean = false
 
     fun response() = route.response()
 
@@ -117,6 +132,9 @@ class Request(private val route: Route) {
 
     fun content(content: Content) = this.apply { this.content = content }
     fun content() = content
+
+    fun required(required: Boolean) = this.apply { this.required = required }
+    fun required() = required
 
     fun build() = route
 }
@@ -128,17 +146,27 @@ class Content {
     fun entries(): List<ContentEntry> = entries
 }
 
-class ContentEntry(private val mimeType: String) {
+class ContentEntry(private var mimeTypes: MutableList<String>) {
+    constructor(vararg mimeTypes: String) : this(mimeTypes.toMutableList())
+
     private var schema: Class<*>? = null
     private var example: Any? = null
 
-    fun mime() = mimeType
+    fun mimes() = mimeTypes
 
     fun schema(schema: Class<*>) = this.also { this.schema = schema }
     fun schema() = schema as? Class<Any>
 
     fun example(example: Any) = this.also { this.example = example }
     fun example(): Any? = example
+
+    fun withMime(mimeType: String) = this.also { this.mimeTypes.add(mimeType) }
+
+    fun asMediaType(): MediaType {
+        val entry = this
+        return MediaType()
+                .schema(entry.schema()?.parseSchema(entry.example()))
+    }
 }
 
 //#endregion
@@ -212,8 +240,9 @@ enum class FormatType {
     STRING(String::class.java, "string", null),
     BYTE(Byte::class.java, "string", "byte"),
     BOOLEAN(Boolean::class.java, "boolean", null),
-    DATE(Date::class.java, "string", "date");
-    //    DATETIME(Date::class.java, "string", "date-time"), TODO look for class in kotlin to replace Date
+    DATE(Date::class.java, "string", "date"),
+    ENUM(Enum::class.java, "string", null);
+    //    DATETIME(Date::class.java, "strng", "date-time"), TODO look for class in kotlin to replace Date
     //PASSWORD(String::class.java, "string", "password")
 
     private val clazz: Class<*>
@@ -234,6 +263,7 @@ enum class FormatType {
         fun getByClass(clazz: Class<*>?): FormatType? {
             if (clazz == null) return null
             return values().find { it.clazz == clazz }
+                    ?: values().find { it.clazz == clazz.superclass }
         }
 
     }

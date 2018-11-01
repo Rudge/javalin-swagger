@@ -10,7 +10,6 @@ import io.swagger.v3.oas.models.Operation
 import io.swagger.v3.oas.models.PathItem
 import io.swagger.v3.oas.models.Paths
 import io.swagger.v3.oas.models.media.ArraySchema
-import io.swagger.v3.oas.models.media.MediaType
 import io.swagger.v3.oas.models.media.Schema
 import io.swagger.v3.oas.models.parameters.RequestBody
 import io.swagger.v3.oas.models.responses.ApiResponse
@@ -24,7 +23,7 @@ import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
 private val schemas = mutableMapOf<String, Schema<*>>()
 private val documentedRoutes = ArrayDeque<Route>()
 
-fun documented(app: Unit, route: () -> Route): Route {
+fun documented(route: () -> Route): Route {
     val route = route()
     documentedRoutes.add(route)
     return route
@@ -110,6 +109,7 @@ private fun asOperation(route: Route): Operation {
             .operationId(route.id())
             .addTagsItem(route.tag())
             .deprecated(route.deprecated())
+            .security(route.securityRequirements())
 
     operation.parameters(
             route.params()
@@ -121,6 +121,7 @@ private fun asOperation(route: Route): Operation {
         operation.requestBody(
                 RequestBody()
                         .description(request.description())
+                        .required(request.required())
                         .content(request.content()?.asSwagger()))
     }
 
@@ -134,33 +135,16 @@ private fun asOperation(route: Route): Operation {
     return operation
 }
 
-private fun Parameter.asSwagger(): SwaggerParameter {
-    val parameter = this
-    parameter.schema(parameter.schema() ?: String::class.java)
-
-    return SwaggerParameter()
-            .name(parameter.name())
-            .description(parameter.description())
-            .`in`(parameter.location().toString())
-            .required(parameter.required())
-            .schema(parameter.schema()?.parseSchema(null))
-}
-
 private fun Content.asSwagger(): SwaggerContent {
     val content = this
     val swaggerContent = SwaggerContent()
 
     content.entries().forEach {
-        swaggerContent.addMediaType(it.mime(), it.asMediaType())
+        val mediaType = it.asMediaType()
+        it.mimes().forEach { mime -> swaggerContent.addMediaType(mime, mediaType) }
     }
 
     return swaggerContent
-}
-
-private fun ContentEntry.asMediaType(): MediaType {
-    val entry = this
-    return MediaType()
-            .schema(entry.schema()?.parseSchema(entry.example()))
 }
 
 private fun ResponseEntry.asSwagger(): ApiResponse {
@@ -171,7 +155,7 @@ private fun ResponseEntry.asSwagger(): ApiResponse {
             .headers(entry.headers())
 }
 
-private fun <T> Class<T>.parseSchema(example: T?, genericType: Class<*>? = null): Schema<*>? {
+fun <T> Class<T>.parseSchema(example: T?, genericType: Class<*>? = null): Schema<*>? {
     val cls = this
     val formatType = FormatType.getByClass(cls)
 
